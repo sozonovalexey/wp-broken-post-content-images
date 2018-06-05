@@ -9,6 +9,15 @@ Author URI: https://sozonov-alexey.ru/
 WordPress Version Required: 1.5
 */
 
+register_activation_hook( __FILE__, 'bpci_plugin_activate' );
+
+function bpci_plugin_activate(){
+    if (!is_plugin_active('batch_operations/batch.php') and current_user_can('activate_plugins')) {
+        // Stop activation redirect and show error
+        wp_die('Sorry, but this plugin requires the <a href="https://github.com/IgorVBelousov/batch_operations" target="_blank">Batch operations plugin</a> to be installed and active. <br><a href="' . admin_url( 'plugins.php' ) . '">&laquo; Return to Plugins</a>');
+    }
+}
+
 #
 #  This regexp pattern is used to find the
 #  <img src="xxxx"> links in posts.
@@ -33,6 +42,15 @@ function bpci_mm_ci_manage_page() {
 
     ?>
     <div class="wrap">
+
+        <?php
+        if (isset($_GET['step']) && '4' == $_GET['step']) {
+            echo '<h3>Done!</h3>';
+            echo '<a href="/wp-admin/tools.php?page=wp-broken-post-content-images%2Fwp-broken-post-content-images.php">Back</a>';
+            exit;
+        }
+        ?>
+
         <h2>Broken Post Content Images</h2>
         <?php
         if ( !isset($_POST['step']) ) {
@@ -74,6 +92,9 @@ function bpci_mm_ci_manage_page() {
                 echo $postidnum . " was the post ID chosen<br />";
             }
 
+            $limit = 10;
+            $index = 0;
+
             foreach ($postid_list as $v) {
                 $postid = $v->ID;
                 $post = $wpdb->get_results("SELECT post_content FROM $wpdb->posts WHERE ID = '$postid'");
@@ -95,6 +116,11 @@ function bpci_mm_ci_manage_page() {
                     }
 
                 }
+                ++$index;
+
+                if ($index > $limit) {
+                    break;
+                }
             }
 
 //            if ($debug == 1) {
@@ -110,12 +136,17 @@ function bpci_mm_ci_manage_page() {
                 <form action="" method="post">
                     <ul>
                         <?php
-                        foreach ($img_processed as $img => $status) {
-                            ?>
-                            <li style="color: <?php if ($status) { ?>green<?php } else { ?>red<?php } ?>;">
-                                <?php echo $img; ?> ... <?php if ($status) { ?>OK!<?php } else { ?>Broken!<?php } ?>
-                            </li>
-                            <?php
+                        if ($index > $limit) {
+                            echo '<li>Too many results to preview!</li>';
+                        }
+                        else {
+                            foreach ($img_processed as $img => $status) {
+                                ?>
+                                <li style="color: <?php if ($status) { ?>green<?php } else { ?>red<?php } ?>;">
+                                    <?php echo $img; ?> ... <?php if ($status) { ?>OK!<?php } else { ?>Broken!<?php } ?>
+                                </li>
+                                <?php
+                            }
                         }
                         ?>
                     </ul>
@@ -145,16 +176,29 @@ function bpci_mm_ci_manage_page() {
                 $postid_list = $wpdb->get_results("SELECT DISTINCT ID FROM $wpdb->posts WHERE ID = '$postidnum'");
             }
 
+            $operations = [];
             foreach ($postid_list as $v) {
                 $post_id = $v->ID;
-                bpci_replace_images($post_id);
+                $operations[] = ['bpci_batch_operation', [$post_id]];
+
+                //bpci_replace_images($post_id);
             }
 
-            echo '<h3>Done!</h3>';
+            $batch['title'] = 'Replacing';
+            $batch['operations'] = $operations;
+            $redirect = '/wp-admin/tools.php?page=wp-broken-post-content-images%2Fwp-broken-post-content-images.php&step=4';
+
+            batch_operations_start($batch, $redirect);
+
         }
         ?>
     </div>
     <?php
+}
+
+
+function bpci_batch_operation($post_id, &$context) {
+    bpci_replace_images($post_id);
 }
 
 function bpci_check_img($url) {
