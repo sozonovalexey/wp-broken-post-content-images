@@ -34,7 +34,10 @@ function bpci_mm_ci_manage_page() {
     $debug = 0;
 
     $img_processed = [];
+    $broken_images_counter = 0;
     $site_url = get_option('siteurl');
+
+    $page_url = '/wp-admin/tools.php?page=wp-broken-post-content-images%2Fwp-broken-post-content-images.php';
 
     if ($debug) {
         echo get_option('siteurl');
@@ -46,7 +49,7 @@ function bpci_mm_ci_manage_page() {
         <?php
         if (isset($_GET['step']) && '4' == $_GET['step']) {
             echo '<h3>Done!</h3>';
-            echo '<a href="/wp-admin/tools.php?page=wp-broken-post-content-images%2Fwp-broken-post-content-images.php">Back</a>';
+            echo '<a href="' . $page_url .'">Back</a>';
             exit;
         }
         ?>
@@ -109,7 +112,12 @@ function bpci_mm_ci_manage_page() {
 
                     $b = parse_url($url);
                     $image_url = ($b['scheme'] == 'http' || $b['scheme'] == 'https') ? $url : trim($site_url, '/') . '/' . trim($url, '/');
-                    $img_processed[$url] = bpci_check_img($image_url);
+                    $checked = bpci_check_img($image_url);
+                    $img_processed[$url] = $checked;
+
+                    if (!$checked) {
+                        $broken_images_counter++;
+                    }
 
                     if ($debug == 1) {
                         echo $image_url . '<br>';
@@ -136,7 +144,7 @@ function bpci_mm_ci_manage_page() {
                 <form action="" method="post">
                     <ul>
                         <?php
-                        if ($index > $limit) {
+                        if ($broken_images_counter > 0 && $index > $limit) {
                             echo '<li>Too many results to preview!</li>';
                         }
                         else {
@@ -150,11 +158,15 @@ function bpci_mm_ci_manage_page() {
                         }
                         ?>
                     </ul>
-                    <p class="submit">
-                        <input name="postid" type="hidden" id="postid" value="<?php echo $postidnum; ?>" />
-                        <input name="step" type="hidden" id="step" value="3" />
-                        <input type="submit" name="Submit" value="Replace broken images with a 1x1 transparent gif &raquo;" />
-                    </p>
+                    <?php if ($broken_images_counter > 0) { ?>
+                        <p class="submit">
+                            <input name="postid" type="hidden" id="postid" value="<?php echo $postidnum; ?>" />
+                            <input name="step" type="hidden" id="step" value="3" />
+                            <input type="submit" name="Submit" value="Replace broken images with a 1x1 transparent gif &raquo;" />
+                        </p>
+                    <?php } else { ?>
+                        <p class="submit"><a href="<?php echo $page_url; ?>">Back</a></p>
+                    <?php } ?>
                 </form>
                 <?php
             }
