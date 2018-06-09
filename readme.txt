@@ -16,6 +16,9 @@ Benefit? Your images never become dead because you have full control!
 
 == Installation ==
 
-* Upload the folder "wp-broken-post-content-images" into your "wp-content/plugins"
-* Log in to Wordpress Administration area, choose "Plugins" from the main menu, find "Broken Post Content Images", and click the "Activate" button
-* Choose "Manage->Broken Post Content Images" from the main menu and follow the directions on the page.
+* SSH into the server as the user that your WordPress install exists under.
+* Clone latest stable version of code <https://github.com/sozonovalexey/wp-broken-post-content-images/archive/master.zip>.
+* Unpack this archive to the `/wp-content/plugins/` directory.
+* Log in to Wordpress Administration area, choose "Plugins" from the main menu, find "Broken Post Content Images", and click the "Activate" button.
+* Check all posts with this command: $ wp bpci check all --skip 0 --limit 100
+* Check custom post with this command: $ wp bpci check 1234
