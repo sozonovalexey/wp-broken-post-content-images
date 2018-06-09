@@ -34,7 +34,6 @@ function bpci_mm_ci_manage_page() {
     $debug = 0;
 
     $img_processed = [];
-    $broken_images_counter = 0;
     $site_url = get_option('siteurl');
 
     $page_url = '/wp-admin/tools.php?page=wp-broken-post-content-images%2Fwp-broken-post-content-images.php';
@@ -56,7 +55,7 @@ function bpci_mm_ci_manage_page() {
 
         <h2>Broken Post Content Images</h2>
         <?php
-        if ( !isset($_POST['step']) ) {
+        if ( !isset($_POST['step']) && !isset($_GET['step'])) {
             ?>
             <p>Here's how this plugin works:</p>
             <ol>
@@ -95,126 +94,160 @@ function bpci_mm_ci_manage_page() {
                 echo $postidnum . " was the post ID chosen<br />";
             }
 
-            $limit = 10;
-            $index = 0;
-
+            $temp = [];
+            $operations = [];
             foreach ($postid_list as $v) {
-                $postid = $v->ID;
-                $post = $wpdb->get_results("SELECT post_content FROM $wpdb->posts WHERE ID = '$postid'");
-                $post_content = $post[0]->post_content;
-
-                preg_match_all(BPCI_IMG_SRC_REGEXP, $post_content, $matches);
-
-                foreach ($matches[1] as $url) {
-//                    if ($debug == 1) {
-//                        echo "url=$url<br>";
-//                    }
-
-                    $b = parse_url($url);
-                    $image_url = ($b['scheme'] == 'http' || $b['scheme'] == 'https') ? $url : trim($site_url, '/') . '/' . trim($url, '/');
-                    $checked = bpci_check_img($image_url);
-                    $img_processed[$url] = $checked;
-
-                    if (!$checked) {
-                        $broken_images_counter++;
-                    }
-
-                    if ($debug == 1) {
-                        echo $image_url . '<br>';
-                    }
-
-                }
-                ++$index;
-
-                if ($index > $limit) {
-                    break;
-                }
+                $post_id = $v->ID;
+                $temp[$post_id] = ['bpci_batch_operation', [$post_id, 'check']];
             }
 
-//            if ($debug == 1) {
-//                var_dump($img_processed);
-//            }
+            foreach ($temp as $operation) {
+                $operations[] = $operation;
+            }
+
+            $batch['title'] = 'Checking images';
+            $batch['operations'] = $operations;
+            $redirect = '/wp-admin/tools.php?page=wp-broken-post-content-images%2Fwp-broken-post-content-images.php&step=3';
+
+            bpci_clear_log_file();
+
+            batch_operations_start($batch, $redirect);
+
             ?>
             <?php
-            if (is_null($img_processed)) {
-                die('Nothing to do.');
-            } else {
-                ?>
-                <p><strong>Results:</strong></p>
-                <form action="" method="post">
+        }
+        ?>
+
+        <?php
+        if (isset($_GET['step']) && '3' == $_GET['step']) {
+            ?>
+            <p><strong>Broken images:</strong></p>
+
+            <?php
+            $img_processed = bpci_get_broken_images();
+            ?>
+
+            <form action="" method="post">
+                <?php if (count($img_processed) > 0) { ?>
                     <ul>
                         <?php
-                        if ($broken_images_counter > 0 && $index > $limit) {
-                            echo '<li>Too many results to preview!</li>';
-                        }
-                        else {
-                            foreach ($img_processed as $img => $status) {
+                        foreach ($img_processed as $post_id => $images) {
+                            foreach ($images as $image) {
                                 ?>
-                                <li style="color: <?php if ($status) { ?>green<?php } else { ?>red<?php } ?>;">
-                                    <?php echo $img; ?> ... <?php if ($status) { ?>OK!<?php } else { ?>Broken!<?php } ?>
+                                <li style="color: red">
+                                    Post ID: <?php echo $post_id; ?>; <?php echo $image; ?>
                                 </li>
                                 <?php
                             }
                         }
                         ?>
                     </ul>
-                    <?php if ($broken_images_counter > 0) { ?>
-                        <p class="submit">
-                            <input name="postid" type="hidden" id="postid" value="<?php echo $postidnum; ?>" />
-                            <input name="step" type="hidden" id="step" value="3" />
-                            <input type="submit" name="Submit" value="Replace broken images with a 1x1 transparent gif &raquo;" />
-                        </p>
-                    <?php } else { ?>
-                        <p class="submit"><a href="<?php echo $page_url; ?>">Back</a></p>
-                    <?php } ?>
-                </form>
-                <?php
-            }
+                <?php } else { echo '<span style="color:green;">Empty!</span>'; } ?>
+                <?php if (count($img_processed) > 0) { ?>
+                    <p class="submit">
+                        <input name="step" type="hidden" id="step" value="3" />
+                        <input type="submit" name="Submit" value="Replace broken images with a 1x1 transparent gif &raquo;" />
+                    </p>
+                <?php } else { ?>
+                    <p class="submit"><a href="<?php echo $page_url; ?>">Back</a></p>
+                <?php } ?>
+            </form>
+            <?php
         }
         ?>
 
         <?php
         if ('3' == $_POST['step']) {
-
-            $postidnum = trim($_POST['postid']);
-
-            if ($debug == 1) {
-                echo $postidnum . " is the current post ID<br />";
-            }
-
-            if (strtoupper($postidnum) == 'ALL') {
-                $postid_list = $wpdb->get_results("SELECT DISTINCT ID FROM $wpdb->posts WHERE post_content LIKE ('%<img%')");
-            } else {
-                $postid_list = $wpdb->get_results("SELECT DISTINCT ID FROM $wpdb->posts WHERE ID = '$postidnum'");
-            }
-
             $operations = [];
-            foreach ($postid_list as $v) {
-                $post_id = $v->ID;
-                $operations[] = ['bpci_batch_operation', [$post_id]];
-
-                //bpci_replace_images($post_id);
+            $img_processed = bpci_get_broken_images();
+            foreach ($img_processed as $post_id => $images) {
+                $operations[] = ['bpci_batch_operation', [$post_id, 'replace']];
             }
+
+            bpci_clear_log_file();
 
             $batch['title'] = 'Replacing';
             $batch['operations'] = $operations;
             $redirect = '/wp-admin/tools.php?page=wp-broken-post-content-images%2Fwp-broken-post-content-images.php&step=4';
 
             batch_operations_start($batch, $redirect);
-
         }
         ?>
     </div>
     <?php
 }
 
+function bpci_get_broken_images() {
+    $return = [];
+    $handle = fopen(__DIR__ . '/wp-broken-post-content-images.log', 'r');
+    if ($handle) {
+        while (($line = fgets($handle)) !== false) {
+            $temp_arr = explode(';', $line);
+            if (is_array($temp_arr) && !empty($temp_arr) && isset($temp_arr[1]) && !empty($temp_arr[1])) {
+                $return[$temp_arr[0]][] = $temp_arr[1];
+            }
+        }
+        fclose($handle);
+    }
+    return $return;
+}
 
-function bpci_batch_operation($post_id, &$context) {
-    bpci_replace_images($post_id);
+function bpci_batch_operation($post_id, $operation, &$context) {
+    switch ($operation) {
+        case 'replace':
+            bpci_replace_images($post_id);
+            break;
+        case 'check':
+            bpci_check_images($post_id);
+            //$context['message'] = 'Broken images:<br><iframe style="width: 100%;height: 300px;" src="/wp-content/plugins/wp-broken-post-content-images/wp-broken-post-content-images.log"></iframe>';
+            break;
+    }
+
 }
 
 function bpci_check_img($url) {
-    return false === file_get_contents($url) ? false : true;
+    //TODO
+    //return false === file_get_contents($url) ? false : true;
+
+    $curl = curl_init($url);
+    curl_setopt($curl, CURLOPT_NOBODY, true);
+    $result = curl_exec($curl);
+    $ret = false;
+    if ($result !== false) {
+        $statusCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        if ($statusCode == 200) {
+            $ret = true;
+        }
+    }
+    curl_close($curl);
+    return $ret;
+}
+
+function bpci_check_images($postid) {
+    global $wpdb;
+    $site_url = get_option('siteurl');
+    //$output = 'Post ID: ' . $postid . "\n";
+    $output = '';
+
+    $post = $wpdb->get_results("SELECT post_content FROM $wpdb->posts WHERE ID = '$postid'");
+    $post_content = $post[0]->post_content;
+
+    preg_match_all(BPCI_IMG_SRC_REGEXP, $post_content, $matches);
+
+    foreach ($matches[1] as $url) {
+        $b = parse_url($url);
+        $image_url = ($b['scheme'] == 'http' || $b['scheme'] == 'https') ? $url : trim($site_url, '/') . '/' . trim($url, '/');
+        $checked = bpci_check_img($image_url);
+        if (!$checked) {
+            //$output = 'Post ID: ' . $postid . '; ' . $url . ' ... ' . ($checked ? 'OK!' : 'Broken!') . "\n";
+            $output = $postid  . ';' . $url . "\n";
+        }
+        //$output .= '<span style="color:' . ($checked ? 'green' : 'red') . '">' . $url . ' ... ' . ($checked ? 'OK!' : 'Broken!') . '</span><br>';
+        //$output .= $url . ' ... ' . ($checked ? 'OK!' : 'Broken!') . "\n";
+    }
+
+    file_put_contents(__DIR__ . '/wp-broken-post-content-images.log', $output, FILE_APPEND | LOCK_EX);
+    return true;
 }
 
 function bpci_replace_images($postid) {
@@ -238,6 +271,10 @@ function bpci_replace_images($postid) {
     }
 
     return true;
+}
+
+function bpci_clear_log_file() {
+    file_put_contents(__DIR__ . '/wp-broken-post-content-images.log', '');
 }
 
 add_action('admin_menu', 'bpci_mm_ci_add_pages');
