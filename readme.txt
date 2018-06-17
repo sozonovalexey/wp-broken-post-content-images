@@ -22,3 +22,4 @@ Benefit? Your images never become dead because you have full control!
 * Log in to Wordpress Administration area, choose "Plugins" from the main menu, find "Broken Post Content Images", and click the "Activate" button.
 * Check all posts with this command: $ wp bpci check all --skip=0 --limit=100
 * Check custom post with this command: $ wp bpci check 1234
+* Check custom posts with this command: $ wp bpci check 1234 1235 1236
